@@ -17,6 +17,8 @@
 package platforms
 
 import (
+	"runtime"
+
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -31,4 +33,18 @@ func newDefaultMatcher(platform specs.Platform) Matcher {
 			Platform: Normalize(platform),
 		},
 	}
+}
+
+func windowsHostProcessMatcherSpec() specs.Platform {
+	return specs.Platform{
+		OS:           "windows",
+		Architecture: runtime.GOARCH,
+	}
+}
+
+// WindowsHostProcessMatcher returns a matcher that will match on
+// os and arch but not on osVersionPrefix because HostProcess
+// containers can run on any Windows OS version.
+func WindowsHostProcessMatcher() MatchComparer {
+	return Only(windowsHostProcessMatcherSpec())
 }
