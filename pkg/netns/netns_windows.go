@@ -24,8 +24,15 @@ type NetNS struct {
 }
 
 // NewNetNS creates a network namespace for the sandbox
-func NewNetNS(baseDir string) (*NetNS, error) {
-	temp := hcn.HostComputeNamespace{}
+// baseDir is not used for Windows
+func NewNetNS(baseDir string, podNetwork bool) (*NetNS, error) {
+	nsType := hcn.NamespaceTypeHostDefault
+	if podNetwork {
+		nsType = hcn.NamespaceTypeGuest
+	}
+
+	temp := hcn.NewNamespace(nsType)
+
 	hcnNamespace, err := temp.Create()
 	if err != nil {
 		return nil, err

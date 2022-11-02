@@ -247,20 +247,31 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 		return nil, fmt.Errorf("failed to get sandbox container info: %w", err)
 	}
 
+	networkSetupRequired := true
 	podNetwork := true
 
 	if goruntime.GOOS != "windows" &&
 		config.GetLinux().GetSecurityContext().GetNamespaceOptions().GetNetwork() == runtime.NamespaceMode_NODE {
 		// Pod network is not needed on linux with host network.
+		networkSetupRequired = false
 		podNetwork = false
 	}
-	if goruntime.GOOS == "windows" &&
-		config.GetWindows().GetSecurityContext().GetHostProcess() {
-		// Windows HostProcess pods can only run on the host network
-		podNetwork = false
+	if goruntime.GOOS == "windows" {
+		if config.GetWindows().GetSecurityContext().GetHostProcess() {
+			// Windows HostProcess pods can only run on the host network
+			// and do not require a new Network Namespace to be configured
+			networkSetupRequired = false
+			podNetwork = false
+		} else if config.GetWindows().GetSecurityContext().GetNamespaceOptions().GetNetwork() == runtime.NamespaceMode_NODE {
+			// Non-HostProcess Windows pods can be joined to either the host or pod
+			// network and both require a new HNS network to be configured.
+			podNetwork = false
+		}
 	}
 
-	if podNetwork {
+	log.G(ctx).Infof("networkSetupRequired = %t", networkSetupRequired)
+	log.G(ctx).Infof("podnetwork = %t", podNetwork)
+	if networkSetupRequired {
 		netStart := time.Now()
 
 		// If it is not in host network namespace then create a namespace and set the sandbox
@@ -271,7 +282,7 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 		if c.config.NetNSMountsUnderStateDir {
 			netnsMountDir = filepath.Join(c.config.StateDir, "netns")
 		}
-		sandbox.NetNS, err = netns.NewNetNS(netnsMountDir)
+		sandbox.NetNS, err = netns.NewNetNS(netnsMountDir, podNetwork)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create network namespace for sandbox %q: %w", id, err)
 		}

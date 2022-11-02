@@ -161,7 +161,8 @@ type NetNS struct {
 }
 
 // NewNetNS creates a network namespace.
-func NewNetNS(baseDir string) (*NetNS, error) {
+// podNetwork is not used for Linux
+func NewNetNS(baseDir string, podNetwork bool) (*NetNS, error) {
 	path, err := newNS(baseDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup netns: %w", err)
