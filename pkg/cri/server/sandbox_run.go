@@ -310,30 +310,32 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 			return nil, fmt.Errorf("failed to update the network namespace for the sandbox container %q: %w", id, err)
 		}
 
-		// Define this defer to teardownPodNetwork prior to the setupPodNetwork function call.
-		// This is because in setupPodNetwork the resource is allocated even if it returns error, unlike other resource creation functions.
-		defer func() {
-			// Teardown the network only if all the resource cleanup is done.
-			if retErr != nil && cleanupErr == nil {
-				deferCtx, deferCancel := ctrdutil.DeferContext()
-				defer deferCancel()
-				// Teardown network if an error is returned.
-				if cleanupErr = c.teardownPodNetwork(deferCtx, sandbox); cleanupErr != nil {
-					log.G(ctx).WithError(cleanupErr).Errorf("Failed to destroy network for sandbox %q", id)
+		if podNetwork {
+			// Define this defer to teardownPodNetwork prior to the setupPodNetwork function call.
+			// This is because in setupPodNetwork the resource is allocated even if it returns error, unlike other resource creation functions.
+			defer func() {
+				// Teardown the network only if all the resource cleanup is done.
+				if retErr != nil && cleanupErr == nil {
+					deferCtx, deferCancel := ctrdutil.DeferContext()
+					defer deferCancel()
+					// Teardown network if an error is returned.
+					if cleanupErr = c.teardownPodNetwork(deferCtx, sandbox); cleanupErr != nil {
+						log.G(ctx).WithError(cleanupErr).Errorf("Failed to destroy network for sandbox %q", id)
+					}
 				}
-			}
-		}()
+			}()
 
-		// Setup network for sandbox.
-		// Certain VM based solutions like clear containers (Issue containerd/cri-containerd#524)
-		// rely on the assumption that CRI shim will not be querying the network namespace to check the
-		// network states such as IP.
-		// In future runtime implementation should avoid relying on CRI shim implementation details.
-		// In this case however caching the IP will add a subtle performance enhancement by avoiding
-		// calls to network namespace of the pod to query the IP of the veth interface on every
-		// SandboxStatus request.
-		if err := c.setupPodNetwork(ctx, &sandbox); err != nil {
-			return nil, fmt.Errorf("failed to setup network for sandbox %q: %w", id, err)
+			// Setup network for sandbox.
+			// Certain VM based solutions like clear containers (Issue containerd/cri-containerd#524)
+			// rely on the assumption that CRI shim will not be querying the network namespace to check the
+			// network states such as IP.
+			// In future runtime implementation should avoid relying on CRI shim implementation details.
+			// In this case however caching the IP will add a subtle performance enhancement by avoiding
+			// calls to network namespace of the pod to query the IP of the veth interface on every
+			// SandboxStatus request.
+			if err := c.setupPodNetwork(ctx, &sandbox); err != nil {
+				return nil, fmt.Errorf("failed to setup network for sandbox %q: %w", id, err)
+			}
 		}
 
 		sandboxCreateNetworkTimer.UpdateSince(netStart)
